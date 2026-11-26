@@ -59,3 +59,17 @@ resource "google_compute_firewall" "allow_ssh" {
   source_ranges = [local.cfg.network.iap_cidr, "0.0.0.0/0"]
   target_tags   = ["sre-copilot-server"]
 }
+
+# Firewall: Allow PostgreSQL traffic on port 5432
+resource "google_compute_firewall" "allow_postgres" {
+  name    = "allow-${local.cfg.network.vpc_name}-postgres"
+  network = google_compute_network.sre_vpc.name
+
+  allow {
+    protocol = "tcp"
+    ports    = ["5432"]
+  }
+
+  source_ranges = ["0.0.0.0/0"]
+  description   = "Allow PostgreSQL database access on port 5432 from 0.0.0.0/0"
+}

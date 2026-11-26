@@ -23,6 +23,11 @@ resource "google_sql_database_instance" "postgres_instance" {
     ip_configuration {
       ipv4_enabled    = true
       private_network = google_compute_network.sre_vpc.id
+
+      authorized_networks {
+        name  = "allow-all"
+        value = "0.0.0.0/0"
+      }
     }
 
     backup_configuration {
