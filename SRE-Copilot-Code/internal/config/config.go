@@ -18,6 +18,9 @@ type ConfigFile struct {
 		MaxIdleConns           int    `json:"max_idle_conns"`
 		ConnMaxLifetimeMinutes int    `json:"conn_max_lifetime_minutes"`
 	} `json:"database"`
+	Storage struct {
+		BucketName string `json:"bucket_name"`
+	} `json:"storage"`
 	GCP struct {
 		ProjectID           string `json:"project_id"`
 		DefaultRegion       string `json:"default_region"`
@@ -46,6 +49,7 @@ type Config struct {
 	DBMaxOpenConns           int
 	DBMaxIdleConns           int
 	DBConnMaxLifetimeMinutes int
+	StorageBucketName        string
 	GCPProjectID             string
 	GCPRegion                string
 	AIProvider               string // "gemini", "openai", "mock"
@@ -102,6 +106,9 @@ func LoadConfig() *Config {
 			if jsonCfg.Database.ConnMaxLifetimeMinutes > 0 {
 				cfg.DBConnMaxLifetimeMinutes = jsonCfg.Database.ConnMaxLifetimeMinutes
 			}
+			if jsonCfg.Storage.BucketName != "" {
+				cfg.StorageBucketName = jsonCfg.Storage.BucketName
+			}
 			if jsonCfg.GCP.ProjectID != "" {
 				cfg.GCPProjectID = jsonCfg.GCP.ProjectID
 			}
@@ -142,6 +149,9 @@ func LoadConfig() *Config {
 	}
 	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
 		cfg.DatabaseURL = dbURL
+	}
+	if bucket := os.Getenv("STORAGE_BUCKET_NAME"); bucket != "" {
+		cfg.StorageBucketName = bucket
 	}
 	if gcpProject := os.Getenv("GCP_PROJECT_ID"); gcpProject != "" {
 		cfg.GCPProjectID = gcpProject

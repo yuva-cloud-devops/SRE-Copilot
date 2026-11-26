@@ -10,9 +10,9 @@ apt-get update -y
 apt-get install -y curl wget jq ca-certificates postgresql-client nginx logrotate
 
 # 2. Create app user, runtime directory, and dedicated log directory
-USER_NAME="srecopilot"
-USER_HOME="/home/${USER_NAME}"
-BUILDBIN_DIR="${USER_HOME}/build-bin"
+USER_NAME="${USER_NAME}"
+USER_HOME="/home/$USER_NAME"
+BUILDBIN_DIR="$USER_HOME/build-bin"
 LOG_DIR="/var/log/sre-copilot"
 
 id -u "$USER_NAME" &>/dev/null || useradd -m -s /bin/bash "$USER_NAME"
@@ -37,6 +37,9 @@ cat <<EOF > "$BUILDBIN_DIR/config.json"
     "max_open_conns": 25,
     "max_idle_conns": 5,
     "conn_max_lifetime_minutes": 30
+  },
+  "storage": {
+    "bucket_name": "${STORAGE_BUCKET}"
   },
   "gcp": {
     "project_id": "${PROJECT_ID}",
@@ -92,17 +95,17 @@ After=network.target
 [Service]
 Type=simple
 User=${USER_NAME}
-WorkingDirectory=${BUILDBIN_DIR}
-ExecStart=${BUILDBIN_DIR}/sre-copilot
+WorkingDirectory=/home/${USER_NAME}/build-bin
+ExecStart=/home/${USER_NAME}/build-bin/sre-copilot
 Restart=always
 RestartSec=5s
 Environment=PORT=8080
 Environment=GIN_MODE=release
 
 # Application Log Persistence on Server
-StandardOutput=append:${LOG_DIR}/sre-copilot.log
-StandardError=append:${LOG_DIR}/sre-copilot.log
-ReadWritePaths=${LOG_DIR}
+StandardOutput=append:/var/log/sre-copilot/sre-copilot.log
+StandardError=append:/var/log/sre-copilot/sre-copilot.log
+ReadWritePaths=/var/log/sre-copilot
 
 # Security sandboxing
 NoNewPrivileges=true
@@ -158,8 +161,8 @@ systemctl daemon-reload
 systemctl enable sre-copilot.service
 
 echo "Nginx reverse proxy configured: Port 80 -> http://127.0.0.1:8080"
-echo "Runtime directory configured: ${BUILDBIN_DIR}"
-echo "Application logs configured:  ${LOG_DIR}/sre-copilot.log"
+echo "Runtime directory configured: $BUILDBIN_DIR"
+echo "Application logs configured:  $LOG_DIR/sre-copilot.log"
 echo "Log rotation configured:      /etc/logrotate.d/sre-copilot"
 echo "Ready for GitHub Actions CI/CD artifact deployment."
 echo "=========================================="

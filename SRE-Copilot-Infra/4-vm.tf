@@ -2,6 +2,12 @@
 # 4. Compute Engine Virtual Machine (From YAML)
 # ==============================================================================
 
+# Reserve a static external public IP for permanent UI & webhook access
+resource "google_compute_address" "vm_static_ip" {
+  name   = "${local.cfg.vm.name}-static-ip"
+  region = local.cfg.project.region
+}
+
 resource "google_compute_instance" "sre_copilot_vm" {
   name         = local.cfg.vm.name
   machine_type = local.cfg.vm.machine_type
@@ -21,7 +27,7 @@ resource "google_compute_instance" "sre_copilot_vm" {
     subnetwork = google_compute_subnetwork.sre_subnet.id
 
     access_config {
-      // Ephemeral public IP for UI access and webhook delivery
+      nat_ip = google_compute_address.vm_static_ip.address
     }
   }
 
@@ -33,12 +39,14 @@ resource "google_compute_instance" "sre_copilot_vm" {
   metadata = {
     enable-oslogin = "TRUE"
     startup-script = templatefile("${path.module}/scripts/startup.sh", {
-      PROJECT_ID      = local.cfg.project.id
-      DEFAULT_REGION  = local.cfg.project.region
-      DB_HOST         = google_sql_database_instance.postgres_instance.private_ip_address
-      DB_USER         = local.cfg.database.db_user
-      DB_PASSWORD     = local.effective_db_password
-      DB_NAME         = local.cfg.database.db_name
+      PROJECT_ID     = local.cfg.project.id
+      DEFAULT_REGION = local.cfg.project.region
+      DB_HOST        = google_sql_database_instance.postgres_instance.private_ip_address
+      DB_USER        = local.cfg.database.db_user
+      DB_PASSWORD    = local.effective_db_password
+      DB_NAME        = local.cfg.database.db_name
+      USER_NAME      = "srecopilot"
+      STORAGE_BUCKET = google_storage_bucket.artifacts_bucket.name
     })
   }
 

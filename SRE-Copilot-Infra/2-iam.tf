@@ -30,7 +30,7 @@ locals {
 }
 
 resource "google_project_iam_member" "copilot_iam_bindings" {
-  for_each = toset(locals.copilot_roles)
+  for_each = toset(local.copilot_roles)
   project  = local.cfg.project.id
   role     = each.key
   member   = "serviceAccount:${google_service_account.sre_copilot_sa.email}"
@@ -44,7 +44,7 @@ resource "google_service_account" "sre_deployer_sa" {
 }
 
 resource "google_project_iam_member" "deployer_iam_bindings" {
-  for_each = toset(locals.deployer_roles)
+  for_each = toset(local.deployer_roles)
   project  = local.cfg.project.id
   role     = each.key
   member   = "serviceAccount:${google_service_account.sre_deployer_sa.email}"

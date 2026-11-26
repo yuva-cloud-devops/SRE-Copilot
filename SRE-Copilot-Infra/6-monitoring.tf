@@ -13,7 +13,7 @@ resource "google_monitoring_notification_channel" "sre_copilot_webhook" {
   type         = "webhook_tokenauth"
 
   labels = {
-    url = "http://${google_compute_instance.sre_copilot_vm.network_interface[0].access_config[0].nat_ip}/api/v1/webhooks/gcp/monitoring"
+    url = "http://${google_compute_address.vm_static_ip.address}/api/v1/webhooks/gcp/monitoring"
   }
 
   user_labels = {
@@ -28,7 +28,7 @@ resource "google_monitoring_notification_channel" "sre_copilot_logging_webhook" 
   type         = "webhook_tokenauth"
 
   labels = {
-    url = "http://${google_compute_instance.sre_copilot_vm.network_interface[0].access_config[0].nat_ip}/api/v1/webhooks/gcp/logging"
+    url = "http://${google_compute_address.vm_static_ip.address}/api/v1/webhooks/gcp/logging"
   }
 
   user_labels = {
@@ -118,7 +118,30 @@ resource "google_monitoring_alert_policy" "cloudsql_high_memory" {
 # 4. Metric Alerts: Cloud Run (Microservices / API Traffic)
 # ------------------------------------------------------------------------------
 
-# Alert 4: Cloud Run 5xx Server Error Rate Spike
+# Alert 4a: Cloud Run 4xx Client Error Rate Spike
+resource "google_monitoring_alert_policy" "cloudrun_4xx_errors" {
+  display_name = "Warning: Cloud Run 4xx Client Error Rate Spike"
+  combiner     = "OR"
+
+  conditions {
+    display_name = "Cloud Run 4xx Responses Count > ${try(local.cfg.monitoring.cloudrun_4xx_threshold, 10)}"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_revision\" AND metric.type = \"run.googleapis.com/request_count\" AND metric.labels.response_code_class = \"4xx\""
+      comparison      = "COMPARISON_GT"
+      threshold_value = try(local.cfg.monitoring.cloudrun_4xx_threshold, 10)
+      duration        = "60s"
+
+      aggregations {
+        alignment_period   = "60s"
+        per_series_aligner = "ALIGN_RATE"
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.sre_copilot_webhook.name]
+}
+
+# Alert 4b: Cloud Run 5xx Server Error Rate Spike
 resource "google_monitoring_alert_policy" "cloudrun_5xx_errors" {
   display_name = "Critical: Cloud Run 5xx Server Error Rate Spike"
   combiner     = "OR"

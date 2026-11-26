@@ -8,20 +8,22 @@ This directory contains production-ready Terraform modules where **100% of infra
 
 ```
 SRE-Copilot-Infra/
-├── config.yaml             # 🌟 Central YAML configuration (Everything configured here!)
-├── config.yaml.example     # Template example for different environments
-├── 0-provider.tf           # yamldecode("config.yaml"), GCP & Random provider initialization
-├── 1-vpc.tf                # VPC, Subnet, Private Peering & Firewall Rules from YAML
-├── 2-iam.tf                # Read-Only Service Account & Project IAM Roles
-├── 3-database.tf           # Managed Cloud SQL PostgreSQL 16 (Private VPC Peering)
-├── 4-vm.tf                 # Compute Engine VM running SRE Copilot & startup script
-├── 5-storage.tf            # GCS Bucket for RCA postmortems and report archives
-├── 6-monitoring.tf         # Part 1: Cloud Monitoring & Logging Alert Policies (Metric & Log Alerts)
-├── 7-workload-identity.tf  # Workload Identity Pool & Provider for GitHub Actions OIDC
-├── variables.tf            # Points to config_file (default: config.yaml)
-├── outputs.tf              # Exported outputs (VM IP, Webhook URLs, DB details)
+├── config.yaml               # 🌟 Central YAML configuration (Everything configured here!)
+├── config.yaml.example       # Template example for different environments
+├── 0-provider.tf             # yamldecode("config.yaml"), GCP & Random provider initialization
+├── 1-vpc.tf                  # VPC, Subnet, Private Peering & Firewall Rules from YAML
+├── 2-iam.tf                  # Read-Only Service Account & Project IAM Roles
+├── 3-database.tf             # Managed Cloud SQL PostgreSQL 16 (Private VPC Peering)
+├── 4-vm.tf                   # Compute Engine VM running SRE Copilot & startup script
+├── 5-storage.tf              # GCS Bucket for RCA postmortems and report archives
+├── 6-monitoring.tf           # Part 1: Cloud Monitoring & Logging Alert Policies (Metric & Log Alerts)
+├── 7-workload-identity.tf    # Workload Identity Pool & Provider for GitHub Actions OIDC
+├── 8-sample-test-service.tf  # Sample Nginx Cloud Run Microservice for Real Metric Alert Testing
+├── variables.tf              # Points to config_file (default: config.yaml)
+├── outputs.tf                # Exported outputs (VM IP, Webhook URLs, Sample Service URLs)
 └── scripts/
-    └── startup.sh          # Automated VM bootstrap script (Systemd service)
+    ├── startup.sh            # Automated VM bootstrap script (Systemd service & Nginx)
+    └── test-alerts.sh        # Alert Testing Suite (Instant simulation & Real GCP metrics)
 ```
 
 ---
@@ -68,11 +70,30 @@ storage:
   retention_days: 365
   versioning_enabled: true
 
+workload_identity:
+  pool_id: "sre-github-pool"
+  provider_id: "sre-github-provider"
+  github_repository: "yuva-cloud-devops/SRE-Copilot"
+
 monitoring:
-  webhook_name: "SRE Copilot Ingestion Webhook"
-  alert_policy_name: "Critical: Compute Engine / Cloud Run High Saturation"
+  webhook_name: "SRE Copilot Monitoring Webhook"
+  logging_webhook_name: "SRE Copilot Logging Webhook"
   cpu_threshold: 0.85
   cpu_duration: "120s"
+  cloudsql_cpu_threshold: 0.80
+  cloudsql_memory_threshold: 0.85
+  cloudrun_4xx_threshold: 10 # Rate of 4xx responses/minute
+  cloudrun_5xx_threshold: 5
+  cloudrun_latency_threshold_ms: 2000
+
+# Sample Nginx Microservice on Cloud Run for Real GCP Metric Alert Testing
+sample_service:
+  enabled: true
+  name: "sample-nginx-service"
+  image: "nginx:alpine"
+  container_port: 80
+  invoker_members:
+    - "user:yuvaraj.k@quadrasystems.net"
 ```
 
 ---
@@ -91,7 +112,47 @@ terraform plan
 terraform apply
 ```
 
-To use an alternate YAML file (e.g. `staging.yaml`):
+---
+
+## 🧪 Testing GCP Metric & Log Alerts
+
+Use [`scripts/test-alerts.sh`](scripts/test-alerts.sh) to test all alert scenarios:
+
 ```bash
-terraform apply -var="config_file=staging.yaml"
+chmod +x scripts/test-alerts.sh
+
+# Run interactive test suite
+./scripts/test-alerts.sh http://<VM_IP> <SAMPLE_CLOUDRUN_URL>
 ```
+
+### Direct Commands to Trigger Real GCP Alerts:
+
+1. **Cloud Run 4xx Client Error Alert (sends 15x 404s)**:
+   ```bash
+   TOKEN=$(gcloud auth print-identity-token)
+   for i in {1..15}; do
+     curl -s -o /dev/null -w "%{http_code}\n" \
+       -H "Authorization: Bearer $TOKEN" \
+       "<SAMPLE_CLOUDRUN_URL>/trigger-404-error"
+     sleep 0.5
+   done
+   ```
+2. **Cloud Run 5xx Server Error Alert**:
+   ```bash
+   TOKEN=$(gcloud auth print-identity-token)
+   for i in {1..10}; do
+     curl -s -o /dev/null -w "%{http_code}\n" \
+       -H "Authorization: Bearer $TOKEN" \
+       "<SAMPLE_CLOUDRUN_URL>/trigger-500-error"
+     sleep 1
+   done
+   ```
+3. **Cloud Logging ERROR Alert**:
+   ```bash
+   gcloud logging write sre-app-log "CRITICAL: Database connection pool exhausted" --severity=ERROR
+   ```
+4. **VM High CPU Saturation Alert**:
+   ```bash
+   # On the VM:
+   python3 -c "import time, multiprocessing; [multiprocessing.Process(target=lambda: [x for x in iter(int, 1)]).start() for _ in range(4)]; time.sleep(130)"
+   ```

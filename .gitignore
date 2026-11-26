@@ -1,0 +1,138 @@
+# ==============================================================================
+# SRE Copilot Root .gitignore
+# Covers Go Application, Terraform Infrastructure, CI/CD, Secrets & OS files
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Go Compiled Binaries & Test Artifacts (SRE-Copilot-Code)
+# ------------------------------------------------------------------------------
+bin/
+build-bin/
+dist/
+sre-copilot
+sre-copilot.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.txt
+coverage.html
+profile.out
+
+# Go Workspace
+go.work
+go.work.sum
+
+# ------------------------------------------------------------------------------
+# 2. Terraform Infrastructure (SRE-Copilot-Infra)
+# ------------------------------------------------------------------------------
+# Local .terraform working directories
+**/.terraform/*
+.terraform/
+
+# Terraform State files & backups
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Terraform plan output files
+*.tfplan
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Terraform local variable overrides
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+# ------------------------------------------------------------------------------
+# 3. Sensitive Credentials, Keys & Secrets
+# ------------------------------------------------------------------------------
+*.key
+*.pem
+*.pfx
+*.p12
+*.crt
+*.cert
+id_rsa*
+id_ed25519*
+
+# GCP Service Account keys & credentials
+*credentials*.json
+*service-account*.json
+key.json
+sa-key.json
+gcp-key.json
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# ------------------------------------------------------------------------------
+# 4. Logs, Runtime & Temporary Files
+# ------------------------------------------------------------------------------
+*.log
+logs/
+tmp/
+temp/
+
+# ------------------------------------------------------------------------------
+# 5. Operating System Files
+# ------------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ------------------------------------------------------------------------------
+# 6. IDE & Editor Files
+# ------------------------------------------------------------------------------
+# JetBrains (GoLand, IntelliJ)
+.idea/
+*.iml
+*.iws
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+*.code-workspace
+
+# Vim / Emacs
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+*#
+.#*

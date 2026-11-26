@@ -1,11 +1,13 @@
 # ==============================================================================
-# SRE Copilot GCP Infrastructure Configuration (YAML Template)
+# SRE Copilot GCP Infrastructure Configuration Template (config.yaml.example)
+# Copy this file to config.yaml and customize for your GCP environment:
+#   cp config.yaml.example config.yaml
 # ==============================================================================
 
 project:
-  id: "your-gcp-project-id"
-  region: "us-central1"
-  zone: "us-central1-a"
+  id: "your-gcp-project-id"        # Replace with your actual GCP Project ID
+  region: "us-central1"            # Target GCP Region
+  zone: "us-central1-a"            # Target GCP Zone
   environment: "production"
 
 network:
@@ -19,20 +21,21 @@ network:
 database:
   instance_name_prefix: "sre-copilot-db"
   version: "POSTGRES_16"
-  tier: "db-f1-micro"
+  tier: "db-f1-micro"              # Use db-custom-2-7680 for production SLA
   db_name: "sre_copilot"
   db_user: "sre_admin"
-  db_password: ""
+  db_password: ""                  # Leave empty to auto-generate a secure random 20-character password
   max_connections: 100
   backup_enabled: true
   backup_start_time: "02:00"
 
 vm:
   name: "sre-copilot-server"
-  machine_type: "e2-medium"
+  machine_type: "e2-medium"        # 2 vCPUs, 4GB RAM
   os_image: "debian-cloud/debian-12"
   disk_size_gb: 30
   disk_type: "pd-balanced"
+  assign_public_ip: true
 
 storage:
   bucket_prefix: "sre-copilot-artifacts"
@@ -42,7 +45,7 @@ storage:
 workload_identity:
   pool_id: "sre-github-pool"
   provider_id: "sre-github-provider"
-  github_repository: "*"
+  github_repository: "yuva-cloud-devops/SRE-Copilot"
 
 monitoring:
   webhook_name: "SRE Copilot Monitoring Webhook"
@@ -51,5 +54,15 @@ monitoring:
   cpu_duration: "120s"
   cloudsql_cpu_threshold: 0.80
   cloudsql_memory_threshold: 0.85
+  cloudrun_4xx_threshold: 10       # Rate of 4xx responses/minute
   cloudrun_5xx_threshold: 5
   cloudrun_latency_threshold_ms: 2000
+
+# Sample Nginx Microservice on Cloud Run for Real GCP Metric Alert Testing
+sample_service:
+  enabled: true
+  name: "sample-nginx-service"
+  image: "nginx:alpine"
+  container_port: 80
+  invoker_members:
+    - "user:yuvaraj.k@quadrasystems.net"
