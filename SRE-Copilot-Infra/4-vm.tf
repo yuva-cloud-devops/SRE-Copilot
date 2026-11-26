@@ -37,7 +37,7 @@ resource "google_compute_instance" "sre_copilot_vm" {
   }
 
   metadata = {
-    enable-oslogin = "TRUE"
+    enable-oslogin = "FALSE"
     startup-script = templatefile("${path.module}/scripts/startup.sh", {
       PROJECT_ID     = local.cfg.project.id
       DEFAULT_REGION = local.cfg.project.region

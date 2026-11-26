@@ -5,7 +5,7 @@
     "app_name": "SRE Copilot"
   },
   "database": {
-    "database_url": "postgres://sre_admin:iryc47B2ODZYYFqq0hVd@10.146.0.3:5432/sre_copilot?sslmode=disable",
+    "database_url": "postgres://sre_admin:MySecurePassword123!@34.14.194.41:5432/sre_copilot?sslmode=disable",
     "max_open_conns": 25,
     "max_idle_conns": 5,
     "conn_max_lifetime_minutes": 30
