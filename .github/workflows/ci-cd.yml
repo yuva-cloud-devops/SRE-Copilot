@@ -107,27 +107,31 @@ jobs:
           name: build-bin-bundle
           path: build-bin
 
-      - name: Prepare Deployment Configuration
+      - name: Prepare Deployment Configuration and Archive
         run: |
-          # Inject GEMINI_API_KEY into config.json if set in secrets
+          # 1. Inject GEMINI_API_KEY into config.json if set in secrets
           if [ -n "${GEMINI_API_KEY:-}" ] && [ -f build-bin/config.json ]; then
             jq --arg key "${GEMINI_API_KEY}" '.ai.gemini_api_key = $key' build-bin/config.json > build-bin/config.tmp && mv build-bin/config.tmp build-bin/config.json
             echo "✓ Injected GEMINI_API_KEY into build-bin/config.json"
           fi
 
+          # 2. Package everything into a single compressed tarball for fast atomic transfer
+          tar -czf deploy-bundle.tar.gz -C build-bin .
+          echo "✓ Created deploy-bundle.tar.gz"
+
       - name: Transfer Bundle to Server via Identity-Aware Proxy (IAP) Tunnel
         run: |
-          echo "Syncing build-bin bundle to GCP VM ($GCP_VM_NAME) via IAP..."
-          gcloud compute scp --recurse --tunnel-through-iap \
+          echo "Syncing deploy-bundle.tar.gz to GCP VM ($GCP_VM_NAME) via IAP..."
+          gcloud compute scp --quiet --tunnel-through-iap \
             --project="${GCP_PROJECT_ID}" \
             --zone="${GCP_ZONE}" \
-            build-bin "${GCP_VM_NAME}:/tmp/deploy-bundle"
+            deploy-bundle.tar.gz "${GCP_VM_NAME}:/tmp/deploy-bundle.tar.gz"
 
       - name: Execute Deployment & Restart Services
         run: |
-          echo "Executing remote file sync and restarting services..."
-          gcloud compute ssh "${GCP_VM_NAME}" \
+          echo "Extracting bundle and executing deployment..."
+          gcloud compute ssh --quiet "${GCP_VM_NAME}" \
             --project="${GCP_PROJECT_ID}" \
             --zone="${GCP_ZONE}" \
             --tunnel-through-iap \
-            --command="sudo bash /tmp/deploy-bundle/deploy.sh"
+            --command="sudo mkdir -p /tmp/deploy-bundle && sudo tar -xzf /tmp/deploy-bundle.tar.gz -C /tmp/deploy-bundle && sudo rm -f /tmp/deploy-bundle.tar.gz && sudo bash /tmp/deploy-bundle/deploy.sh"
