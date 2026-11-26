@@ -102,9 +102,9 @@ RestartSec=5s
 Environment=PORT=8080
 Environment=GIN_MODE=release
 
-# Application Log Persistence on Server
-StandardOutput=append:/var/log/sre-copilot/sre-copilot.log
-StandardError=append:/var/log/sre-copilot/sre-copilot.log
+# Application Log Persistence via Journald
+StandardOutput=journal
+StandardError=journal
 ReadWritePaths=/var/log/sre-copilot
 
 # Security sandboxing

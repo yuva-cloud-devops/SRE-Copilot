@@ -333,7 +333,7 @@ func (r *PostgresRepository) FindOpenIncidentForAlert(serviceName, env string, w
 		WHERE status != 'resolved'
 		  AND LOWER(service_name) = LOWER($1)
 		  AND LOWER(environment) = LOWER($2)
-		  AND updated_at >= NOW() - ($3 || ' minutes')::INTERVAL
+		  AND updated_at >= NOW() - ($3 * INTERVAL '1 minute')
 		ORDER BY updated_at DESC
 		LIMIT 1
 	`

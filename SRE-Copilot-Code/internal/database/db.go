@@ -40,12 +40,13 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 
 func AutoMigrate(db *sql.DB) error {
 	// Try creating extensions gracefully
+	_, _ = db.Exec(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`)
 	_, _ = db.Exec(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp";`)
 	_, _ = db.Exec(`CREATE EXTENSION IF NOT EXISTS "vector";`)
 
 	schema := `
 	CREATE TABLE IF NOT EXISTS services (
-		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		service_name VARCHAR(100) UNIQUE NOT NULL,
 		description TEXT,
 		tier VARCHAR(10) NOT NULL DEFAULT 'tier-1',
@@ -55,7 +56,7 @@ func AutoMigrate(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS incidents (
-		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		incident_number SERIAL UNIQUE,
 		title VARCHAR(255) NOT NULL,
 		summary TEXT,
@@ -73,7 +74,7 @@ func AutoMigrate(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS alerts (
-		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		incident_id UUID REFERENCES incidents(id) ON DELETE SET NULL,
 		fingerprint VARCHAR(64) NOT NULL,
 		alert_name VARCHAR(255) NOT NULL,
@@ -95,7 +96,7 @@ func AutoMigrate(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS gcp_logs (
-		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		incident_id UUID REFERENCES incidents(id) ON DELETE CASCADE,
 		log_name VARCHAR(255) NOT NULL,
 		severity VARCHAR(20) NOT NULL,
@@ -106,7 +107,7 @@ func AutoMigrate(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS incident_timeline (
-		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		incident_id UUID NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
 		event_type VARCHAR(50) NOT NULL,
 		description TEXT NOT NULL,
@@ -116,7 +117,7 @@ func AutoMigrate(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS knowledge_documents (
-		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		title VARCHAR(255) NOT NULL,
 		document_type VARCHAR(50) NOT NULL,
 		service_name VARCHAR(100),
@@ -126,7 +127,7 @@ func AutoMigrate(db *sql.DB) error {
 	);
 
 	CREATE TABLE IF NOT EXISTS rca_reports (
-		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		incident_id UUID UNIQUE NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
 		incident_number INT NOT NULL,
 		title VARCHAR(255) NOT NULL,

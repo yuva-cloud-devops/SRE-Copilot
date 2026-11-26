@@ -5,14 +5,52 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/render"
 	"sre-copilot/internal/config"
 	"sre-copilot/internal/database"
 	"sre-copilot/internal/handlers"
 	"sre-copilot/internal/repository"
 	"sre-copilot/internal/services"
 )
+
+type MultiTemplateRender struct {
+	templates map[string]*template.Template
+}
+
+func (r MultiTemplateRender) Instance(name string, data any) render.Render {
+	tmpl, ok := r.templates[name]
+	if !ok {
+		log.Printf("⚠ Template %s not found in MultiTemplateRender", name)
+	}
+	return render.HTML{
+		Template: tmpl,
+		Name:     "base.html",
+		Data:     data,
+	}
+}
+
+func createTemplateRenderer() render.HTMLRender {
+	funcMap := template.FuncMap{
+		"add": func(a, b int) int {
+			return a + b
+		},
+	}
+
+	pages, err := filepath.Glob("templates/pages/*.html")
+	if err != nil {
+		log.Fatalf("Failed to scan templates/pages/*.html: %v", err)
+	}
+
+	tmpls := make(map[string]*template.Template)
+	for _, page := range pages {
+		name := filepath.Base(page)
+		tmpls[name] = template.Must(template.New(name).Funcs(funcMap).ParseFiles("templates/layouts/base.html", page))
+	}
+	return MultiTemplateRender{templates: tmpls}
+}
 
 func main() {
 	cfg := config.LoadConfig()
@@ -52,16 +90,8 @@ func main() {
 	// 4. Configure Gin Router
 	router := gin.Default()
 
-	// Register custom template helper functions
-	funcMap := template.FuncMap{
-		"add": func(a, b int) int {
-			return a + b
-		},
-	}
-	router.SetFuncMap(funcMap)
-
-	// Load HTML templates
-	router.LoadHTMLGlob("templates/**/*.html")
+	// Load isolated HTML templates per page to avoid Go template namespace clobbering
+	router.HTMLRender = createTemplateRenderer()
 
 	// Static files
 	router.Static("/static", "./static")

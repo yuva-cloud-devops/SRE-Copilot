@@ -35,15 +35,25 @@ fi
 # 4. Enforce proper ownership
 chown -R srecopilot:srecopilot /home/srecopilot/build-bin
 
-# 5. Clean up temporary staging directory
+# 5. Direct systemd logs to journald so 'sudo journalctl -u sre-copilot -f' works in real time
+if [ -f /etc/systemd/system/sre-copilot.service ]; then
+  if grep -q "StandardOutput=append:" /etc/systemd/system/sre-copilot.service; then
+    sed -i 's|StandardOutput=append:.*|StandardOutput=journal|' /etc/systemd/system/sre-copilot.service
+    sed -i 's|StandardError=append:.*|StandardError=journal|' /etc/systemd/system/sre-copilot.service
+    systemctl daemon-reload
+    echo "✓ Reconfigured sre-copilot.service logging to journald"
+  fi
+fi
+
+# 6. Clean up temporary staging directory
 rm -rf /tmp/deploy-bundle
 
-# 6. Restart all services
+# 7. Restart all services
 echo "==> Restarting SRE Copilot and Nginx services..."
 systemctl restart sre-copilot
 systemctl restart nginx
 
-# 7. Check service health
+# 8. Check service health
 echo "==> Checking service health..."
 systemctl is-active --quiet sre-copilot && echo "✓ sre-copilot is ACTIVE"
 systemctl is-active --quiet nginx && echo "✓ nginx is ACTIVE"
