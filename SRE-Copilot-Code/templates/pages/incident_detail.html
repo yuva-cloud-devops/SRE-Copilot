@@ -1,0 +1,355 @@
+{{ template "base.html" . }}
+
+{{ define "content" }}
+<div class="space-y-6">
+    <!-- Header with Breadcrumbs & Action Buttons -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div>
+            <div class="flex items-center space-x-2 text-xs text-slate-400 mb-1">
+                <a href="/incidents" class="hover:text-sky-400 flex items-center space-x-1">
+                    <span>&larr;</span>
+                    <span>All Incidents</span>
+                </a>
+                <span>/</span>
+                <span class="text-slate-200 font-mono">#{{ .Incident.IncidentNumber }}</span>
+                <span>/</span>
+                <span class="text-sky-400 font-medium">{{ .Incident.ServiceName }}</span>
+            </div>
+            <h1 class="text-2xl font-bold text-white tracking-tight flex items-center space-x-3">
+                <span>{{ .Incident.Title }}</span>
+            </h1>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <!-- Back to Incidents Button -->
+            <a href="/incidents" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-xs text-slate-300 rounded-lg border border-slate-700 transition-colors">
+                &larr; Back
+            </a>
+
+            <!-- Status Transition Select -->
+            <form id="status-form" class="flex items-center space-x-2">
+                <label class="text-xs text-slate-400">Status:</label>
+                <select id="status-select" onchange="updateStatus(this.value)" class="bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-2.5 py-1.5 focus:ring-1 focus:ring-sky-500">
+                    <option value="investigating" {{ if eq .Incident.Status "investigating" }}selected{{ end }}>Investigating</option>
+                    <option value="identified" {{ if eq .Incident.Status "identified" }}selected{{ end }}>Identified</option>
+                    <option value="monitoring" {{ if eq .Incident.Status "monitoring" }}selected{{ end }}>Monitoring</option>
+                    <option value="resolved" {{ if eq .Incident.Status "resolved" }}selected{{ end }}>Resolved</option>
+                </select>
+            </form>
+
+            <!-- Generate / View RCA -->
+            <a href="/incidents/{{ .Incident.ID }}/rca" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-xs font-semibold text-white rounded-lg shadow-sm transition-all">
+                <span>📝</span>
+                <span>View / Generate RCA</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Dual Workspace Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left Column: Alerts & Live Timeline (7 Cols) -->
+        <div class="lg:col-span-7 space-y-6">
+            <!-- Incident Metadata Strip -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                <div>
+                    <span class="text-slate-500 block">Severity</span>
+                    <span class="font-bold {{ if eq .Incident.Severity "P1" }}text-rose-400{{ else if eq .Incident.Severity "P2" }}text-amber-400{{ else }}text-sky-400{{ end }}">
+                        {{ .Incident.Severity }} Critical
+                    </span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block">Environment</span>
+                    <span class="font-medium text-slate-200">{{ .Incident.Environment }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block">Lead Responder</span>
+                    <span class="font-medium text-slate-200">{{ .Incident.LeadResponder }}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block">Started</span>
+                    <span class="font-medium text-slate-200">{{ .Incident.StartedAt.Format "15:04:05 MST" }}</span>
+                </div>
+            </div>
+
+            <!-- Correlated Alerts Section -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                <div class="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-bold text-white">Correlated Alerts</span>
+                        <span class="text-xs font-mono bg-sky-950 text-sky-400 px-2 py-0.5 rounded-full border border-sky-800">{{ len .Incident.Alerts }} linked</span>
+                    </div>
+                    <span class="text-[11px] text-slate-400">Sliding Window: 15 min</span>
+                </div>
+                <div class="p-4 space-y-3">
+                    {{ range .Incident.Alerts }}
+                    <div class="bg-slate-950 border border-slate-800/80 rounded-lg p-3 hover:border-slate-700 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                                <span class="text-xs font-mono font-bold text-slate-200">{{ .AlertName }}</span>
+                                <span class="text-[10px] text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">{{ .Source }}</span>
+                            </div>
+                            <span class="text-[11px] text-slate-400 font-mono">Recurrence: ×{{ .RecurrenceCount }}</span>
+                        </div>
+                        <p class="text-xs text-slate-300 mt-2">{{ .Description }}</p>
+                        {{ if .GCPMetricType }}
+                        <div class="mt-2 text-[11px] text-sky-400 font-mono bg-sky-950/40 px-2 py-1 rounded border border-sky-900/50 flex items-center justify-between">
+                            <span>Metric: {{ .GCPMetricType }}</span>
+                            {{ if .GCPConsoleURL }}
+                            <a href="{{ .GCPConsoleURL }}" target="_blank" class="text-sky-300 hover:text-white underline text-[10px]">Open in Cloud Console &rarr;</a>
+                            {{ end }}
+                        </div>
+                        {{ end }}
+                        <div class="flex flex-wrap gap-1.5 mt-2">
+                            {{ range $k, $v := .Labels }}
+                            <span class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-800/60 font-mono">{{ $k }}={{ $v }}</span>
+                            {{ end }}
+                        </div>
+                    </div>
+                    {{ else }}
+                    <div class="text-xs text-slate-500 text-center py-4">No individual alerts linked.</div>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Correlated GCP Cloud Logs Section -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                <div class="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-bold text-white">Correlated GCP Cloud Logs</span>
+                        <span class="text-xs font-mono bg-amber-950 text-amber-400 px-2 py-0.5 rounded-full border border-amber-800">{{ len .Incident.Logs }} logs</span>
+                    </div>
+                    <span class="text-[11px] text-slate-400">Cloud Logging Sink</span>
+                </div>
+                <div class="p-4 space-y-2.5 max-h-[300px] overflow-y-auto">
+                    {{ range .Incident.Logs }}
+                    <div class="bg-slate-950 border border-slate-800/80 rounded-lg p-2.5 font-mono text-xs">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-2">
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold {{ if eq .Severity "CRITICAL" }}bg-rose-950 text-rose-300 border border-rose-800{{ else }}bg-amber-950 text-amber-300 border border-amber-800{{ end }}">{{ .Severity }}</span>
+                                <span class="text-slate-300 font-semibold">{{ .ServiceName }}</span>
+                            </div>
+                            <span class="text-[10px] text-slate-500">{{ .Timestamp.Format "15:04:05.000" }}</span>
+                        </div>
+                        <p class="text-slate-400 text-[11px] mt-1.5 break-all">{{ .Message }}</p>
+                    </div>
+                    {{ else }}
+                    <div class="text-xs text-slate-500 text-center py-4">No error logs linked to this incident.</div>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Chronological Event Timeline -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+                <div class="px-5 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                    <span class="text-sm font-bold text-white">Incident Timeline</span>
+                    <span class="text-[11px] text-slate-400">Live SSE Synced</span>
+                </div>
+
+                <!-- Add Note Form -->
+                <div class="p-4 border-b border-slate-800 bg-slate-950/40">
+                    <form id="comment-form" onsubmit="submitComment(event)" class="flex gap-2">
+                        <input type="text" id="comment-input" placeholder="Add an investigation note, query run, or hypothesis..." class="flex-1 bg-slate-900 border border-slate-700 text-xs text-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-sky-500">
+                        <button type="submit" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg border border-slate-700 transition-colors">
+                            Post Note
+                        </button>
+                    </form>
+                </div>
+
+                <div id="timeline-feed" class="p-5 space-y-4 max-h-[420px] overflow-y-auto">
+                    {{ range .Incident.Timeline }}
+                    <div class="flex items-start space-x-3 text-xs">
+                        <div class="w-2 h-2 rounded-full bg-sky-500 mt-1.5 flex-shrink-0"></div>
+                        <div class="flex-1 space-y-0.5">
+                            <div class="flex items-center space-x-2">
+                                <span class="font-mono text-[11px] text-slate-500">{{ .CreatedAt.Format "15:04:05" }}</span>
+                                {{ if .CreatedBy }}
+                                <span class="text-[11px] font-semibold text-slate-300">[{{ .CreatedBy }}]</span>
+                                {{ end }}
+                            </div>
+                            <div class="text-slate-300">{{ .Description }}</div>
+                        </div>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: AI SRE Copilot (5 Cols) -->
+        <div class="lg:col-span-5 space-y-6">
+            <!-- AI Copilot Panel -->
+            <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-sky-900/40 rounded-xl shadow-lg shadow-sky-950/20 overflow-hidden flex flex-col h-[780px]">
+                <!-- Copilot Header -->
+                <div class="p-4 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400 text-sm">
+                            🤖
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-white flex items-center space-x-1.5">
+                                <span>AI Investigation Copilot</span>
+                                <span class="px-1.5 py-0.2 rounded text-[10px] bg-sky-500/10 text-sky-400 border border-sky-500/20">Active</span>
+                            </div>
+                            <div class="text-[10px] text-slate-400">Contextual microservice triage & guidance</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Action Chips -->
+                <div class="px-4 py-2.5 bg-slate-950/60 border-b border-slate-800 flex flex-wrap gap-1.5">
+                    <button onclick="askCopilot('What is broken and why?')" class="text-[11px] bg-slate-900 hover:bg-slate-800 text-sky-300 border border-sky-800/50 px-2.5 py-1 rounded-md transition-colors">
+                        ⚡ Analyze Root Cause
+                    </button>
+                    <button onclick="askCopilot('What should I do next to mitigate this?')" class="text-[11px] bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-2.5 py-1 rounded-md transition-colors">
+                        🛠 Suggest Next Actions
+                    </button>
+                    <button onclick="askCopilot('Are there similar past incidents?')" class="text-[11px] bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 px-2.5 py-1 rounded-md transition-colors">
+                        🔍 Find Past Precedents
+                    </button>
+                </div>
+
+                <!-- Copilot Messages Body -->
+                <div id="copilot-chat" class="flex-1 p-4 overflow-y-auto space-y-4 text-xs">
+                    <!-- Initial Welcome / Triage Bubble -->
+                    <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-3.5 space-y-2">
+                        <div class="text-[11px] font-bold text-sky-400 flex items-center space-x-1.5">
+                            <span>⚡</span>
+                            <span>Incident Synthesis Ready</span>
+                        </div>
+                        <p class="text-slate-300 leading-relaxed">
+                            I've correlated <strong>{{ len .Incident.Alerts }} alerts</strong> for service <code class="text-sky-300 bg-slate-900 px-1 py-0.5 rounded">{{ .Incident.ServiceName }}</code>. 
+                            The dominant failure signature matches database connection exhaustion.
+                        </p>
+                        <div class="pt-2 border-t border-slate-800/60">
+                            <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block mb-1">Recommended Verified Runbook</span>
+                            {{ range .Runbooks }}
+                            <a href="/knowledge?q={{ .Title }}" class="text-sky-400 hover:underline block font-mono text-[11px]">📖 {{ .Title }} &rarr;</a>
+                            {{ else }}
+                            <span class="text-slate-500 text-[11px]">No matching runbook found.</span>
+                            {{ end }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Copilot Input Bar -->
+                <div class="p-3 border-t border-slate-800 bg-slate-900/90">
+                    <form onsubmit="handleChatSubmit(event)" class="relative flex items-center">
+                        <input type="text" id="copilot-input" placeholder="Ask Copilot (e.g., 'Draft diagnostic command', 'What queries are hung?')..." class="w-full bg-slate-950 border border-slate-700 text-xs text-white rounded-lg pl-3 pr-10 py-2.5 focus:outline-none focus:border-sky-500">
+                        <button type="submit" class="absolute right-2 text-slate-400 hover:text-sky-400 text-sm p-1">
+                            ➤
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const incidentID = "{{ .Incident.ID }}";
+
+function updateStatus(newStatus) {
+    const formData = new FormData();
+    formData.append("status", newStatus);
+    formData.append("responder", "Alex (On-Call SRE)");
+
+    fetch(`/api/v1/incidents/${incidentID}/status`, {
+        method: "POST",
+        body: formData
+    }).then(res => res.json()).then(() => {
+        window.location.reload();
+    });
+}
+
+function submitComment(e) {
+    e.preventDefault();
+    const input = document.getElementById("comment-input");
+    const comment = input.value.trim();
+    if (!comment) return;
+
+    const formData = new FormData();
+    formData.append("comment", comment);
+    formData.append("author", "Alex (On-Call SRE)");
+
+    fetch(`/api/v1/incidents/${incidentID}/comment`, {
+        method: "POST",
+        body: formData
+    }).then(res => res.json()).then(event => {
+        input.value = "";
+        const feed = document.getElementById("timeline-feed");
+        const div = document.createElement("div");
+        div.className = "flex items-start space-x-3 text-xs";
+        div.innerHTML = `
+            <div class="w-2 h-2 rounded-full bg-sky-500 mt-1.5 flex-shrink-0"></div>
+            <div class="flex-1 space-y-0.5">
+                <div class="flex items-center space-x-2">
+                    <span class="font-mono text-[11px] text-slate-500">${new Date().toLocaleTimeString()}</span>
+                    <span class="text-[11px] font-semibold text-slate-300">[Alex (On-Call SRE)]</span>
+                </div>
+                <div class="text-slate-300">${comment}</div>
+            </div>
+        `;
+        feed.prepend(div);
+    });
+}
+
+function handleChatSubmit(e) {
+    e.preventDefault();
+    const input = document.getElementById("copilot-input");
+    const question = input.value.trim();
+    if (!question) return;
+    askCopilot(question);
+    input.value = "";
+}
+
+function askCopilot(question) {
+    const chat = document.getElementById("copilot-chat");
+
+    // Add user bubble
+    const userDiv = document.createElement("div");
+    userDiv.className = "bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-slate-200 ml-8 text-right";
+    userDiv.innerText = question;
+    chat.appendChild(userDiv);
+
+    // Add assistant bubble with streaming placeholder
+    const aiDiv = document.createElement("div");
+    aiDiv.className = "bg-slate-950 border border-slate-800/90 rounded-xl p-3.5 space-y-1.5 text-slate-300 mr-4 font-mono";
+    aiDiv.innerHTML = `<span class="inline-block w-2 h-3 bg-sky-400 animate-pulse"></span>`;
+    chat.appendChild(aiDiv);
+    chat.scrollTop = chat.scrollHeight;
+
+    fetch(`/api/v1/incidents/${incidentID}/ai/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: question })
+    }).then(response => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        aiDiv.innerHTML = "";
+
+        function read() {
+            reader.read().then(({ done, value }) => {
+                if (done) return;
+                const chunk = decoder.decode(value);
+                const lines = chunk.split("\n");
+                for (const line of lines) {
+                    if (line.startsWith("data: ")) {
+                        try {
+                            const data = JSON.parse(line.substring(6));
+                            if (data.chunk) {
+                                aiDiv.innerHTML += data.chunk;
+                                chat.scrollTop = chat.scrollHeight;
+                            }
+                        } catch (err) {}
+                    }
+                }
+                read();
+            });
+        }
+        read();
+    }).catch(err => {
+        aiDiv.innerText = "Error streaming AI advice: " + err;
+    });
+}
+</script>
+{{ end }}

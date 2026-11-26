@@ -1,0 +1,170 @@
+{{ define "base.html" }}
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ .Title }} | SRE Copilot</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX CDN -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        code, pre, .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased">
+    <!-- Top Navbar -->
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-6">
+                <!-- Logo -->
+                <a href="/" class="flex items-center space-x-3 group">
+                    <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-sky-500/20 group-hover:scale-105 transition-transform">
+                        ⚡
+                    </div>
+                    <div>
+                        <div class="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+                            SRE Copilot
+                        </div>
+                        <div class="text-[10px] text-sky-400 tracking-wider font-semibold uppercase -mt-1">
+                            Incident Intelligence
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Main Navigation Tabs -->
+                <nav class="hidden md:flex space-x-1 pl-4 border-l border-slate-800">
+                    <a href="/" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {{ if eq .ActiveTab "dashboard" }}bg-slate-800 text-sky-400 font-semibold shadow-sm{{ else }}text-slate-400 hover:text-slate-200 hover:bg-slate-800/50{{ end }}">
+                        📊 Dashboard
+                    </a>
+                    <a href="/incidents" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {{ if eq .ActiveTab "incidents" }}bg-slate-800 text-sky-400 font-semibold shadow-sm{{ else }}text-slate-400 hover:text-slate-200 hover:bg-slate-800/50{{ end }}">
+                        🚨 Incidents
+                    </a>
+                    <a href="/rca" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {{ if eq .ActiveTab "rca" }}bg-slate-800 text-sky-400 font-semibold shadow-sm{{ else }}text-slate-400 hover:text-slate-200 hover:bg-slate-800/50{{ end }}">
+                        📋 RCA Center
+                    </a>
+                    <a href="/knowledge" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors {{ if eq .ActiveTab "knowledge" }}bg-slate-800 text-sky-400 font-semibold shadow-sm{{ else }}text-slate-400 hover:text-slate-200 hover:bg-slate-800/50{{ end }}">
+                        📖 Runbooks & Docs
+                    </a>
+                </nav>
+            </div>
+
+            <!-- Right Actions & Quick Buttons -->
+            <div class="flex items-center space-x-3">
+                <!-- Trigger Simulated Alert Button (Accessible from every page) -->
+                <button onclick="globalSimulateAlert()" title="Send synthetic Prometheus webhook to test correlation" class="hidden sm:inline-flex items-center space-x-1.5 px-3 py-1.5 bg-sky-950 hover:bg-sky-900 text-sky-300 text-xs font-medium rounded-lg border border-sky-800 transition-colors">
+                    <span>📡</span>
+                    <span>Test Ingest Alert</span>
+                </button>
+
+                <!-- Live Correlator Pulse Badge -->
+                <div class="flex items-center space-x-2 text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-full">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span class="hidden sm:inline">Engine: Active</span>
+                </div>
+
+                <!-- User Avatar / Profile -->
+                <div class="text-xs text-slate-400 pl-2 border-l border-slate-800">
+                    <span class="text-slate-200 font-medium">Alex (SRE)</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Slot -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {{ template "content" . }}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs text-slate-500">
+        SRE Copilot Monolith &bull; Go + HTML Templates &bull; Automated Alert Correlation & AI Root Cause Analysis
+    </footer>
+
+    <!-- Global SSE Handler & Alert Simulation Script -->
+    <script>
+        const evtSource = new EventSource("/api/v1/stream");
+        evtSource.addEventListener("new_incident", function(e) {
+            console.log("New incident received:", e.data);
+            const data = JSON.parse(e.data);
+            // Refresh current view if on dashboard or incidents list
+            if (window.location.pathname === "/" || window.location.pathname === "/incidents") {
+                window.location.reload();
+            }
+        });
+        evtSource.addEventListener("status_change", function(e) {
+            console.log("Status change:", e.data);
+        });
+
+        function globalSimulateAlert() {
+            const payload = {
+                version: "1.0",
+                incident: {
+                    incident_id: "gcp-inc-" + Date.now().toString(36),
+                    resource_id: "order-service-rev-004",
+                    resource_name: "order-service",
+                    resource_type: "cloud_run_revision",
+                    resource: {
+                        type: "cloud_run_revision",
+                        labels: {
+                            service_name: "order-service",
+                            project_id: "prod-cloud-infra-2026",
+                            location: "us-central1",
+                            environment: "production"
+                        }
+                    },
+                    metric: {
+                        type: "run.googleapis.com/container/memory/utilizations",
+                        displayName: "Container Memory Utilization"
+                    },
+                    started_at: Math.floor(Date.now() / 1000),
+                    state: "open",
+                    summary: "High Memory Utilization (>92%) on Cloud Run container",
+                    condition_name: "Memory Utilization Threshold Exceeded",
+                    policy_name: "Critical: Order Service Memory Surge",
+                    url: "https://console.cloud.google.com/monitoring/alerting/incidents",
+                    documentation: {
+                        content: "Check heap dumps and recent deployment commits for goroutine/memory leaks."
+                    }
+                }
+            };
+
+            fetch("/api/v1/webhooks/gcp/monitoring", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            }).then(res => res.json()).then(data => {
+                alert("✓ GCP Cloud Monitoring Alert Ingested!\nPolicy: " + data.policy_name + "\nSuppressed/Duplicate: " + data.suppressed + "\nIncident ID: " + (data.copilot_incident ? data.copilot_incident.id : "Existing"));
+                window.location.reload();
+            }).catch(err => {
+                alert("Error sending GCP alert: " + err);
+            });
+        }
+    </script>
+</body>
+</html>
+{{ end }}

@@ -1,0 +1,137 @@
+{{ template "base.html" . }}
+
+{{ define "content" }}
+<div class="space-y-6">
+    <!-- Top Metrics Overview (Clickable Filters) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- P1 Card -->
+        <a href="/incidents?severity=P1" class="bg-slate-900 border border-rose-900/40 hover:border-rose-700/60 rounded-xl p-5 shadow-sm relative overflow-hidden group transition-all">
+            <div class="absolute -right-4 -bottom-4 w-20 h-20 bg-rose-500/10 rounded-full blur-xl group-hover:bg-rose-500/20 transition-all"></div>
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-rose-400 uppercase tracking-wider">P1 Critical</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 {{ if gt .P1Count 0 }}animate-ping{{ end }}"></span>
+            </div>
+            <div class="text-3xl font-bold text-white mt-2">{{ .P1Count }}</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>Requires immediate intervention</span>
+                <span class="text-rose-400 group-hover:translate-x-1 transition-transform">&rarr;</span>
+            </div>
+        </a>
+
+        <!-- P2 Card -->
+        <a href="/incidents?severity=P2" class="bg-slate-900 border border-amber-900/40 hover:border-amber-700/60 rounded-xl p-5 shadow-sm relative overflow-hidden group transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-amber-400 uppercase tracking-wider">P2 High</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            </div>
+            <div class="text-3xl font-bold text-white mt-2">{{ .P2Count }}</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>Active degradation</span>
+                <span class="text-amber-400 group-hover:translate-x-1 transition-transform">&rarr;</span>
+            </div>
+        </a>
+
+        <!-- P3 / P4 Card -->
+        <a href="/incidents" class="bg-slate-900 border border-sky-900/40 hover:border-sky-700/60 rounded-xl p-5 shadow-sm relative overflow-hidden group transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-sky-400 uppercase tracking-wider">P3 / P4 Moderate</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-sky-500"></span>
+            </div>
+            <div class="text-3xl font-bold text-white mt-2">{{ .P3Count }}</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>Monitored anomalies</span>
+                <span class="text-sky-400 group-hover:translate-x-1 transition-transform">&rarr;</span>
+            </div>
+        </a>
+
+        <!-- Resolved Card -->
+        <a href="/incidents?status=resolved" class="bg-slate-900 border border-emerald-900/40 hover:border-emerald-700/60 rounded-xl p-5 shadow-sm relative overflow-hidden group transition-all">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Resolved</span>
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            </div>
+            <div class="text-3xl font-bold text-white mt-2">{{ .ResolvedCount }}</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>RCAs drafted & closed</span>
+                <span class="text-emerald-400 group-hover:translate-x-1 transition-transform">&rarr;</span>
+            </div>
+        </a>
+    </div>
+
+    <!-- Active Incident Triage Section -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+            <div>
+                <h2 class="text-lg font-bold text-white tracking-tight">Active Incident Triage</h2>
+                <p class="text-xs text-slate-400 mt-0.5">Real-time correlated incidents from Prometheus & Grafana</p>
+            </div>
+            <div class="flex items-center space-x-3">
+                <a href="/incidents" class="text-xs text-sky-400 hover:text-sky-300 font-medium transition-colors">
+                    View All Incidents ({{ .TotalCount }}) &rarr;
+                </a>
+                <button onclick="globalSimulateAlert()" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 rounded-lg border border-slate-700 transition-colors">
+                    <span>📡</span>
+                    <span>Simulate Incoming Alert</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Incidents List -->
+        <div class="divide-y divide-slate-800">
+            {{ range .Incidents }}
+            <a href="/incidents/{{ .ID }}" class="block px-6 py-4 hover:bg-slate-800/60 transition-colors group">
+                <div class="flex items-start justify-between">
+                    <div class="space-y-1.5 max-w-3xl">
+                        <div class="flex items-center space-x-2.5">
+                            <!-- Severity Badge -->
+                            {{ if eq .Severity "P1" }}
+                            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">P1 CRITICAL</span>
+                            {{ else if eq .Severity "P2" }}
+                            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">P2 HIGH</span>
+                            {{ else }}
+                            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30">{{ .Severity }}</span>
+                            {{ end }}
+
+                            <!-- Status Badge -->
+                            <span class="px-2 py-0.5 rounded text-[11px] font-medium 
+                                {{ if eq .Status "investigating" }}bg-purple-500/10 text-purple-400 border border-purple-500/20
+                                {{ else if eq .Status "identified" }}bg-yellow-500/10 text-yellow-400 border border-yellow-500/20
+                                {{ else if eq .Status "monitoring" }}bg-blue-500/10 text-blue-400 border border-blue-500/20
+                                {{ else }}bg-emerald-500/10 text-emerald-400 border border-emerald-500/20{{ end }}">
+                                {{ .Status }}
+                            </span>
+
+                            <span class="text-xs font-mono text-slate-400">#{{ .IncidentNumber }}</span>
+                            <span class="text-xs font-medium text-slate-300 bg-slate-800 px-2 py-0.5 rounded">{{ .ServiceName }}</span>
+                            <span class="text-xs text-slate-500 font-mono">[{{ .Environment }}]</span>
+                        </div>
+
+                        <h3 class="text-base font-semibold text-white group-hover:text-sky-400 transition-colors">
+                            {{ .Title }}
+                        </h3>
+
+                        <p class="text-xs text-slate-400 line-clamp-1">
+                            {{ .Summary }}
+                        </p>
+                    </div>
+
+                    <div class="text-right space-y-1.5 flex-shrink-0">
+                        <div class="inline-flex items-center space-x-1.5 bg-slate-950 border border-slate-800 px-2.5 py-1 rounded-md text-xs font-mono text-sky-400">
+                            <span>🔔</span>
+                            <span>{{ .AlertCount }} Correlated Alerts</span>
+                        </div>
+                        <div class="text-[11px] text-slate-500">
+                            Started {{ .StartedAt.Format "15:04 MST" }}
+                        </div>
+                    </div>
+                </div>
+            </a>
+            {{ else }}
+            <div class="text-center py-12 text-slate-500 text-sm">
+                No active incidents. Systems operational.
+            </div>
+            {{ end }}
+        </div>
+    </div>
+</div>
+{{ end }}

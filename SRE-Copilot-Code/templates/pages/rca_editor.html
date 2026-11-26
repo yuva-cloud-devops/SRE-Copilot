@@ -1,0 +1,103 @@
+{{ template "base.html" . }}
+
+{{ define "content" }}
+<div class="space-y-6 max-w-5xl mx-auto">
+    <!-- Breadcrumb & Top Bar -->
+    <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div>
+            <div class="flex items-center space-x-2 text-xs text-slate-400 mb-1">
+                <a href="/incidents/{{ .Incident.ID }}" class="hover:text-slate-200">Incident #{{ .Incident.IncidentNumber }}</a>
+                <span>/</span>
+                <span class="text-sky-400 font-medium">Postmortem & RCA</span>
+            </div>
+            <h1 class="text-2xl font-bold text-white tracking-tight">Root Cause Analysis (RCA)</h1>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <button onclick="window.print()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg border border-slate-700 transition-colors">
+                🖨 Export / Print
+            </button>
+            <button onclick="saveRCA()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white rounded-lg transition-colors">
+                Publish RCA
+            </button>
+        </div>
+    </div>
+
+    <!-- AI Generation Banner -->
+    <div class="bg-gradient-to-r from-sky-950/60 to-indigo-950/60 border border-sky-800/40 rounded-xl p-4 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <span class="text-2xl">✨</span>
+            <div>
+                <h3 class="text-xs font-bold text-sky-400 uppercase tracking-wider">AI Generated Postmortem Draft</h3>
+                <p class="text-xs text-slate-300">Synthesized from {{ .Incident.AlertCount }} correlated alerts and {{ len .Incident.Timeline }} timeline events.</p>
+            </div>
+        </div>
+        <span class="text-xs font-mono text-slate-400">Ready for review</span>
+    </div>
+
+    <!-- RCA Form Body -->
+    <div class="space-y-6">
+        <!-- Executive Summary -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-2">
+            <label class="text-xs font-bold text-slate-300 uppercase tracking-wider">Executive Summary</label>
+            <textarea rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-sans leading-relaxed">{{ .RCA.ExecutiveSummary }}</textarea>
+        </div>
+
+        <!-- Impact Summary -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-2">
+            <label class="text-xs font-bold text-slate-300 uppercase tracking-wider">User & System Impact</label>
+            <textarea rows="3" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-sans leading-relaxed">{{ .RCA.ImpactSummary }}</textarea>
+        </div>
+
+        <!-- Root Cause Analysis -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-2">
+            <label class="text-xs font-bold text-slate-300 uppercase tracking-wider">Technical Root Cause</label>
+            <textarea rows="4" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-sans leading-relaxed">{{ .RCA.RootCauseAnalysis }}</textarea>
+        </div>
+
+        <!-- 5 Whys Analysis -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <label class="text-xs font-bold text-slate-300 uppercase tracking-wider">5 Whys Investigation</label>
+                <span class="text-[10px] text-sky-400 font-mono">Causal Chain Analysis</span>
+            </div>
+            <div class="space-y-3">
+                {{ range $index, $item := .RCA.FiveWhys }}
+                <div class="bg-slate-950 border border-slate-800/80 rounded-lg p-3 text-xs space-y-1.5">
+                    <div class="flex items-center space-x-2 font-bold text-sky-400">
+                        <span class="font-mono">Why {{ add $index 1 }}:</span>
+                        <span>{{ $item.Why }}</span>
+                    </div>
+                    <div class="text-slate-300 pl-4 border-l-2 border-sky-800">
+                        {{ $item.Answer }}
+                    </div>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+
+        <!-- Preventive Actions & Action Items -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+            <label class="text-xs font-bold text-slate-300 uppercase tracking-wider">Preventive Action Items</label>
+            <div class="space-y-2.5">
+                {{ range .RCA.ActionItems }}
+                <div class="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs">
+                    <div class="flex items-center space-x-3">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase font-mono">{{ .Status }}</span>
+                        <span class="text-slate-200">{{ .Description }}</span>
+                    </div>
+                    <span class="text-slate-400 font-mono text-[11px]">Owner: {{ .Assignee }}</span>
+                </div>
+                {{ end }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function saveRCA() {
+    alert("RCA published successfully! Archived in Knowledge Center.");
+    window.location.href = "/incidents/{{ .Incident.ID }}";
+}
+</script>
+{{ end }}

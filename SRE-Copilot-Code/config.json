@@ -1,0 +1,31 @@
+{
+  "server": {
+    "port": "8080",
+    "environment": "development",
+    "app_name": "SRE Copilot"
+  },
+  "database": {
+    "database_url": "postgres://postgres:postgres@localhost:5432/sre_copilot?sslmode=disable",
+    "max_open_conns": 25,
+    "max_idle_conns": 5,
+    "conn_max_lifetime_minutes": 30
+  },
+  "gcp": {
+    "project_id": "prod-ecommerce-project",
+    "default_region": "us-central1",
+    "alerting_webhook_path": "/api/v1/webhooks/gcp/monitoring",
+    "logging_webhook_path": "/api/v1/webhooks/gcp/logging"
+  },
+  "ai": {
+    "provider": "mock",
+    "gemini_api_key": "",
+    "openai_api_key": "",
+    "model_name": "gemini-1.5-flash",
+    "simulate_token_delay_ms": 30
+  },
+  "correlation": {
+    "sliding_window_minutes": 15,
+    "auto_group_by_service": true,
+    "deduplicate_by_fingerprint": true
+  }
+}

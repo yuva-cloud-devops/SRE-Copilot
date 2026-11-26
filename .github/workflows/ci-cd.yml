@@ -1,0 +1,165 @@
+# name: SRE Copilot CI/CD Pipeline
+
+# on:
+#   push:
+#     branches: [ main, master ]
+#     paths:
+#       - 'SRE-Copilot-Code/**'
+#   pull_request:
+#     branches: [ main, master ]
+#     paths:
+#       - 'SRE-Copilot-Code/**'
+#   workflow_dispatch:
+
+# permissions:
+#   contents: read
+#   id-token: write
+
+# jobs:
+#   build-and-test:
+#     name: Build & Package Bundle
+#     runs-on: ubuntu-latest
+#     defaults:
+#       run:
+#         working-directory: SRE-Copilot-Code
+#     steps:
+#       - name: Checkout Code
+#         uses: actions/checkout@v4
+
+#       - name: Set up Go
+#         uses: actions/setup-go@v5
+#         with:
+#           go-version: '1.22'
+#           check-latest: true
+
+#       - name: Verify Dependencies
+#         run: go mod verify
+
+#       - name: Run Code Quality Checks
+#         run: go vet ./...
+
+#       - name: Compile Binary for Linux (GCP VM Target)
+#         run: |
+#           mkdir -p build-bin
+#           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+#             -ldflags="-s -w" \
+#             -o build-bin/sre-copilot ./cmd/server
+
+#       - name: Assemble Complete build-bin Bundle (Binary, Config, Templates, Static)
+#         env:
+#           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+#         run: |
+#           # 1. Ensure bundle directories exist
+#           mkdir -p build-bin/templates build-bin/static
+          
+#           # 2. Package templates and static assets
+#           cp -r templates/* build-bin/templates/
+#           cp -r static/* build-bin/static/
+          
+#           # 3. Include configuration and inject GEMINI_API_KEY if provided
+#           if [ -f config.json ]; then
+#             cp config.json build-bin/config.json
+#             if [ -n "${GEMINI_API_KEY:-}" ]; then
+#               jq --arg key "${GEMINI_API_KEY}" '.ai.gemini_api_key = $key' build-bin/config.json > build-bin/config.tmp && mv build-bin/config.tmp build-bin/config.json
+#               echo "✓ Injected GEMINI_API_KEY into build-bin/config.json"
+#             fi
+#           fi
+
+#           echo "✓ Assembled complete build-bin bundle contents:"
+#           ls -la build-bin/
+#           ls -la build-bin/templates/
+#           ls -la build-bin/static/
+
+#       - name: Upload Complete build-bin Bundle Artifact
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: build-bin-bundle
+#           path: SRE-Copilot-Code/build-bin/
+#           retention-days: 7
+
+#   deploy:
+#     name: Deploy to GCP VM via Workload Identity & IAP
+#     needs: build-and-test
+#     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+#     runs-on: ubuntu-latest
+#     env:
+#       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+#       GCP_ZONE: ${{ secrets.GCP_ZONE || 'us-central1-a' }}
+#       GCP_VM_NAME: ${{ secrets.GCP_VM_NAME || 'sre-copilot-server' }}
+#       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+#     steps:
+#       - name: Authenticate to Google Cloud via Workload Identity Federation
+#         uses: google-github-actions/auth@v2
+#         with:
+#           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+#           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+#       - name: Set up Google Cloud SDK
+#         uses: google-github-actions/setup-gcloud@v2
+
+#       - name: Download Complete build-bin Bundle
+#         uses: actions/download-artifact@v4
+#         with:
+#           name: build-bin-bundle
+#           path: build-bin
+
+#       - name: Transfer Bundle to Server via Identity-Aware Proxy (IAP) Tunnel
+#         run: |
+#           echo "Syncing build-bin bundle to GCP VM ($GCP_VM_NAME) via IAP..."
+#           # Tunnel through IAP using gcloud compute scp to stage files on VM
+#           gcloud compute scp --recurse --tunnel-through-iap \
+#             --project="${GCP_PROJECT_ID}" \
+#             --zone="${GCP_ZONE}" \
+#             build-bin "${GCP_VM_NAME}:/tmp/deploy-bundle"
+
+#       - name: Sync Files to Server Runtime Directory & Restart All Services
+#         run: |
+#           echo "Executing remote file sync and restarting services..."
+#           gcloud compute ssh "${GCP_VM_NAME}" \
+#             --project="${GCP_PROJECT_ID}" \
+#             --zone="${GCP_ZONE}" \
+#             --tunnel-through-iap \
+#             --command="
+#               set -euo pipefail
+#               echo '==> Syncing files to /home/srecopilot/build-bin/ ...'
+#               sudo mkdir -p /home/srecopilot/build-bin/templates /home/srecopilot/build-bin/static
+              
+#               # 1. Update binary
+#               sudo cp -f /tmp/deploy-bundle/sre-copilot /home/srecopilot/build-bin/sre-copilot
+#               sudo chmod +x /home/srecopilot/build-bin/sre-copilot
+              
+#               # 2. Sync templates and static assets
+#               sudo cp -rf /tmp/deploy-bundle/templates/* /home/srecopilot/build-bin/templates/
+#               sudo cp -rf /tmp/deploy-bundle/static/* /home/srecopilot/build-bin/static/
+              
+#               # 3. Only copy config.json if server does not already have a provisioned database config
+#               if [ ! -f /home/srecopilot/build-bin/config.json ] && [ -f /tmp/deploy-bundle/config.json ]; then
+#                 sudo cp /tmp/deploy-bundle/config.json /home/srecopilot/build-bin/config.json
+#                 sudo chmod 600 /home/srecopilot/build-bin/config.json
+#               fi
+              
+#               # 4. Inject GEMINI_API_KEY from pipeline secret directly into config.json
+#               if [ -n "${GEMINI_API_KEY:-}" ]; then
+#                 echo "==> Injecting GEMINI_API_KEY directly into /home/srecopilot/build-bin/config.json..."
+#                 if [ -f /home/srecopilot/build-bin/config.json ]; then
+#                   sudo jq --arg key "${GEMINI_API_KEY}" '.ai.gemini_api_key = $key' /home/srecopilot/build-bin/config.json > /tmp/cfg.tmp && sudo mv /tmp/cfg.tmp /home/srecopilot/build-bin/config.json
+#                 fi
+#               fi
+              
+#               # 5. Enforce runtime directory permissions and secure config.json
+#               sudo chmod 600 /home/srecopilot/build-bin/config.json 2>/dev/null || true
+#               sudo chown -R srecopilot:srecopilot /home/srecopilot/build-bin
+              
+#               # 6. Clean up staging folder
+#               sudo rm -rf /tmp/deploy-bundle
+              
+#               # 7. Restart all services (SRE Copilot Monolith & Nginx Reverse Proxy)
+#               echo '==> Restarting SRE Copilot and Nginx services...'
+#               sudo systemctl restart sre-copilot
+#               sudo systemctl restart nginx
+              
+#               # 7. Check service statuses
+#               echo '==> Checking service health...'
+#               sudo systemctl is-active --quiet sre-copilot && echo '✓ sre-copilot is ACTIVE'
+#               sudo systemctl is-active --quiet nginx && echo '✓ nginx is ACTIVE'
+#             "

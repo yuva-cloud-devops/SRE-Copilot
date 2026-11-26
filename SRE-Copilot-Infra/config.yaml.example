@@ -1,0 +1,55 @@
+# ==============================================================================
+# SRE Copilot GCP Infrastructure Configuration (YAML Template)
+# ==============================================================================
+
+project:
+  id: "your-gcp-project-id"
+  region: "us-central1"
+  zone: "us-central1-a"
+  environment: "production"
+
+network:
+  vpc_name: "sre-copilot-vpc"
+  subnet_name: "sre-copilot-subnet"
+  subnet_cidr: "10.10.0.0/24"
+  http_ports: ["8080", "80", "443"]
+  ssh_ports: ["22"]
+  iap_cidr: "35.235.240.0/20"
+
+database:
+  instance_name_prefix: "sre-copilot-db"
+  version: "POSTGRES_16"
+  tier: "db-f1-micro"
+  db_name: "sre_copilot"
+  db_user: "sre_admin"
+  db_password: ""
+  max_connections: 100
+  backup_enabled: true
+  backup_start_time: "02:00"
+
+vm:
+  name: "sre-copilot-server"
+  machine_type: "e2-medium"
+  os_image: "debian-cloud/debian-12"
+  disk_size_gb: 30
+  disk_type: "pd-balanced"
+
+storage:
+  bucket_prefix: "sre-copilot-artifacts"
+  retention_days: 365
+  versioning_enabled: true
+
+workload_identity:
+  pool_id: "sre-github-pool"
+  provider_id: "sre-github-provider"
+  github_repository: "*"
+
+monitoring:
+  webhook_name: "SRE Copilot Monitoring Webhook"
+  logging_webhook_name: "SRE Copilot Logging Webhook"
+  cpu_threshold: 0.85
+  cpu_duration: "120s"
+  cloudsql_cpu_threshold: 0.80
+  cloudsql_memory_threshold: 0.85
+  cloudrun_5xx_threshold: 5
+  cloudrun_latency_threshold_ms: 2000
