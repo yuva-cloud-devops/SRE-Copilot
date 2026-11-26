@@ -42,10 +42,11 @@ func main() {
 	incidentSvc := services.NewIncidentService(repo, broadcaster)
 	knowledgeSvc := services.NewKnowledgeService(knowledgeRepo)
 	aiSvc := services.NewAICopilotService(cfg)
+	storageSvc := services.NewStorageService(cfg)
 
 	// 3. Initialize Handlers
 	webHandler := handlers.NewWebHandler(incidentSvc, knowledgeSvc, aiSvc)
-	apiHandler := handlers.NewAPIHandler(incidentSvc, knowledgeSvc, aiSvc, broadcaster)
+	apiHandler := handlers.NewAPIHandler(incidentSvc, knowledgeSvc, aiSvc, storageSvc, broadcaster)
 	webhookHandler := handlers.NewWebhookHandler(correlator)
 
 	// 4. Configure Gin Router
@@ -71,6 +72,7 @@ func main() {
 	router.GET("/incidents/:id", webHandler.IncidentDetailPage)
 	router.GET("/rca", webHandler.RCAListPage)
 	router.GET("/incidents/:id/rca", webHandler.RCAPage)
+	router.GET("/incidents/:id/rca/download", webHandler.DownloadRCAMarkdown)
 	router.GET("/knowledge", webHandler.KnowledgePage)
 
 	// API & Real-Time SSE Routes
@@ -81,6 +83,7 @@ func main() {
 		apiGroup.POST("/incidents/:id/comment", apiHandler.AddComment)
 		apiGroup.POST("/incidents/:id/ai/triage", apiHandler.AITriage)
 		apiGroup.POST("/incidents/:id/ai/chat", apiHandler.AIChatStream)
+		apiGroup.POST("/incidents/:id/rca/publish", apiHandler.PublishRCA)
 
 		// Ingestion Webhooks: Google Cloud Monitoring & Cloud Logging
 		apiGroup.POST("/webhooks/gcp/monitoring", webhookHandler.GCPMonitoringWebhook)

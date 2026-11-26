@@ -15,14 +15,16 @@ type APIHandler struct {
 	incidentSvc  *services.IncidentService
 	knowledgeSvc *services.KnowledgeService
 	aiSvc        *services.AICopilotService
+	storageSvc   *services.StorageService
 	broadcaster  *services.SSEBroadcaster
 }
 
-func NewAPIHandler(incidentSvc *services.IncidentService, knowledgeSvc *services.KnowledgeService, aiSvc *services.AICopilotService, broadcaster *services.SSEBroadcaster) *APIHandler {
+func NewAPIHandler(incidentSvc *services.IncidentService, knowledgeSvc *services.KnowledgeService, aiSvc *services.AICopilotService, storageSvc *services.StorageService, broadcaster *services.SSEBroadcaster) *APIHandler {
 	return &APIHandler{
 		incidentSvc:  incidentSvc,
 		knowledgeSvc: knowledgeSvc,
 		aiSvc:        aiSvc,
+		storageSvc:   storageSvc,
 		broadcaster:  broadcaster,
 	}
 }
@@ -136,4 +138,39 @@ func (h *APIHandler) AddComment(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, event)
+}
+
+// PublishRCA handles publishing the Postmortem / RCA report to Google Cloud Storage
+func (h *APIHandler) PublishRCA(c *gin.Context) {
+	id := c.Param("id")
+	incident, err := h.incidentSvc.Get(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Incident not found"})
+		return
+	}
+
+	rca, err := h.aiSvc.GenerateRCA(incident)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to generate RCA: %v", err)})
+		return
+	}
+
+	mdBytes := h.aiSvc.FormatRCAMarkdown(incident, rca)
+	objectName := fmt.Sprintf("postmortems/incident-%d-rca.md", incident.IncidentNumber)
+
+	uri, err := h.storageSvc.UploadArtifact(c.Request.Context(), objectName, "text/markdown; charset=utf-8", mdBytes)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Failed to upload to Cloud Storage: %v", err)})
+		return
+	}
+
+	// Record publication event in the incident timeline
+	_, _ = h.incidentSvc.AddComment(id, fmt.Sprintf("Published official Postmortem RCA to Cloud Storage: %s", uri), "SRE Postmortem Engine")
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":      "published",
+		"artifact":    uri,
+		"object_name": objectName,
+		"message":     fmt.Sprintf("Postmortem published to %s", uri),
+	})
 }

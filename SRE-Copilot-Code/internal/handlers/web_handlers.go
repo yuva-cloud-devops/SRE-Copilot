@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -164,4 +165,26 @@ func (h *WebHandler) KnowledgePage(c *gin.Context) {
 		"Service":   service,
 		"Documents": docs,
 	})
+}
+
+// DownloadRCAMarkdown downloads the formatted postmortem markdown file
+func (h *WebHandler) DownloadRCAMarkdown(c *gin.Context) {
+	id := c.Param("id")
+	incident, err := h.incidentSvc.Get(id)
+	if err != nil {
+		c.String(http.StatusNotFound, "Incident not found")
+		return
+	}
+
+	rca, err := h.aiSvc.GenerateRCA(incident)
+	if err != nil {
+		c.String(http.StatusInternalServerError, "Failed to generate RCA: %v", err)
+		return
+	}
+
+	mdBytes := h.aiSvc.FormatRCAMarkdown(incident, rca)
+	filename := fmt.Sprintf("incident-%d-postmortem.md", incident.IncidentNumber)
+
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	c.Data(http.StatusOK, "text/markdown; charset=utf-8", mdBytes)
 }

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -239,29 +240,192 @@ func (s *AICopilotService) streamSimulatedChat(incident *models.Incident, questi
 func (s *AICopilotService) callGeminiTriage(incident *models.Incident, runbooks []models.KnowledgeDocument) (*models.AICopilotTriageResult, error) {
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=%s", s.cfg.GeminiAPIKey)
 
-	prompt := fmt.Sprintf("You are an expert Site Reliability Engineer (SRE). Triage this incident.\nService: %s\nSeverity: %s\nTitle: %s\nAlerts: %+v\nProvide JSON output matching: {\"summary\": string, \"probable_root_cause\": string, \"recommended_actions\": [{\"step\": 1, \"action\": string, \"command\": string}]}",
-		incident.ServiceName, incident.Severity, incident.Title, incident.Alerts)
+	runbookTitles := []string{}
+	for _, r := range runbooks {
+		runbookTitles = append(runbookTitles, r.Title)
+	}
+
+	prompt := fmt.Sprintf(`You are an expert Site Reliability Engineer (SRE). Triage this incident and return ONLY valid JSON (no markdown formatting, no backticks).
+Incident Details:
+- Service: %s
+- Environment: %s
+- Severity: %s
+- Title: %s
+- Summary: %s
+- Correlated Alerts: %+v
+- Relevant Runbooks: %v
+
+Output JSON schema:
+{
+  "summary": "Concise 2-sentence executive summary of the failure",
+  "probable_root_cause": "Detailed technical root cause",
+  "recommended_actions": [
+    {"step": 1, "action": "Action description", "command": "kubectl/gcloud/curl command"}
+  ],
+  "associated_runbook": "Title of best matching runbook"
+}`, incident.ServiceName, incident.Environment, incident.Severity, incident.Title, incident.Summary, incident.Alerts, runbookTitles)
 
 	body := map[string]interface{}{
 		"contents": []map[string]interface{}{
 			{"parts": []map[string]string{{"text": prompt}}},
+		},
+		"generationConfig": map[string]interface{}{
+			"temperature":     0.2,
+			"responseMimeType": "application/json",
 		},
 	}
 	bJSON, _ := json.Marshal(body)
 
 	resp, err := s.httpClient.Post(url, "application/json", bytes.NewReader(bJSON))
 	if err != nil || resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gemini api error")
+		log.Printf("Gemini API call returned error or non-200 (%v). Using simulated triage.", err)
+		return s.localSimulatedTriage(incident, runbooks)
 	}
 	defer resp.Body.Close()
 
-	// Parse standard response or fallback if parsing fails
-	return s.localSimulatedTriage(incident, runbooks)
+	var geminiResp struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil || len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+		return s.localSimulatedTriage(incident, runbooks)
+	}
+
+	rawText := geminiResp.Candidates[0].Content.Parts[0].Text
+	rawText = strings.TrimSpace(rawText)
+	rawText = strings.TrimPrefix(rawText, "```json")
+	rawText = strings.TrimPrefix(rawText, "```")
+	rawText = strings.TrimSuffix(rawText, "```")
+	rawText = strings.TrimSpace(rawText)
+
+	var parsed struct {
+		Summary            string                     `json:"summary"`
+		ProbableRootCause  string                     `json:"probable_root_cause"`
+		RecommendedActions []models.RecommendedAction `json:"recommended_actions"`
+		AssociatedRunbook  string                     `json:"associated_runbook"`
+	}
+
+	if err := json.Unmarshal([]byte(rawText), &parsed); err != nil {
+		log.Printf("Failed to unmarshal Gemini JSON output: %v. Using simulated triage.", err)
+		return s.localSimulatedTriage(incident, runbooks)
+	}
+
+	if parsed.AssociatedRunbook != "" && len(parsed.RecommendedActions) > 0 {
+		parsed.RecommendedActions[0].RunbookLink = parsed.AssociatedRunbook
+	} else if len(runbooks) > 0 && len(parsed.RecommendedActions) > 0 {
+		parsed.RecommendedActions[0].RunbookLink = runbooks[0].Title
+	}
+
+	res := &models.AICopilotTriageResult{
+		IncidentID:         incident.ID,
+		Summary:            parsed.Summary,
+		ProbableRootCause:  parsed.ProbableRootCause,
+		RecommendedActions: parsed.RecommendedActions,
+	}
+
+	return res, nil
 }
 
 func (s *AICopilotService) streamGeminiChat(incident *models.Incident, question string, runbooks []models.KnowledgeDocument, onChunk func(chunk string) error) error {
-	// Fall back to simulated chat if streaming endpoint fails
-	return s.streamSimulatedChat(incident, question, runbooks, onChunk)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=%s", s.cfg.GeminiAPIKey)
+
+	systemPrompt := fmt.Sprintf("You are SRE Copilot, a principal SRE assisting in real-time incident troubleshooting for %s (Severity: %s, Title: %s). Be concise, actionable, and provide production-safe terminal commands.",
+		incident.ServiceName, incident.Severity, incident.Title)
+
+	body := map[string]interface{}{
+		"system_instruction": map[string]interface{}{
+			"parts": []map[string]string{{"text": systemPrompt}},
+		},
+		"contents": []map[string]interface{}{
+			{"role": "user", "parts": []map[string]string{{"text": question}}},
+		},
+		"generationConfig": map[string]interface{}{
+			"temperature": 0.4,
+		},
+	}
+	bJSON, _ := json.Marshal(body)
+
+	resp, err := s.httpClient.Post(url, "application/json", bytes.NewReader(bJSON))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		log.Printf("Gemini streaming API error (%v). Falling back to simulated stream.", err)
+		return s.streamSimulatedChat(incident, question, runbooks, onChunk)
+	}
+	defer resp.Body.Close()
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "data: ") {
+			data := strings.TrimPrefix(line, "data: ")
+			var chunk struct {
+				Candidates []struct {
+					Content struct {
+						Parts []struct {
+							Text string `json:"text"`
+						} `json:"parts"`
+					} `json:"content"`
+				} `json:"candidates"`
+			}
+			if err := json.Unmarshal([]byte(data), &chunk); err == nil && len(chunk.Candidates) > 0 && len(chunk.Candidates[0].Content.Parts) > 0 {
+				txt := chunk.Candidates[0].Content.Parts[0].Text
+				if txt != "" {
+					_ = onChunk(txt)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// FormatRCAMarkdown formats the incident and root cause analysis into a complete postmortem markdown document
+func (s *AICopilotService) FormatRCAMarkdown(incident *models.Incident, rca *models.RCAReport) []byte {
+	var buf bytes.Buffer
+
+	buf.WriteString(fmt.Sprintf("# Postmortem: Incident #%d - %s\n\n", incident.IncidentNumber, incident.Title))
+	buf.WriteString(fmt.Sprintf("- **Service:** `%s`\n", incident.ServiceName))
+	buf.WriteString(fmt.Sprintf("- **Environment:** `%s`\n", incident.Environment))
+	buf.WriteString(fmt.Sprintf("- **Severity:** `%s`\n", incident.Severity))
+	buf.WriteString(fmt.Sprintf("- **Incident ID:** `%s`\n", incident.ID))
+	buf.WriteString(fmt.Sprintf("- **Generated At:** %s\n\n", time.Now().UTC().Format(time.RFC3339)))
+
+	buf.WriteString("## 1. Executive Summary\n")
+	buf.WriteString(rca.ExecutiveSummary + "\n\n")
+
+	buf.WriteString("## 2. User & System Impact\n")
+	buf.WriteString(rca.ImpactSummary + "\n\n")
+
+	buf.WriteString("## 3. Technical Root Cause\n")
+	buf.WriteString(rca.RootCauseAnalysis + "\n\n")
+
+	buf.WriteString("## 4. 5 Whys Investigation\n")
+	for i, item := range rca.FiveWhys {
+		buf.WriteString(fmt.Sprintf("%d. **Why:** %s\n   **Answer:** %s\n\n", i+1, item.Why, item.Answer))
+	}
+
+	buf.WriteString("## 5. Preventative Action Items\n")
+	buf.WriteString("| Action Description | Assignee | Status |\n")
+	buf.WriteString("|---|---|---|\n")
+	for _, act := range rca.ActionItems {
+		buf.WriteString(fmt.Sprintf("| %s | %s | %s |\n", act.Description, act.Assignee, act.Status))
+	}
+	buf.WriteString("\n")
+
+	buf.WriteString("## 6. Incident Timeline\n")
+	buf.WriteString("| Time (UTC) | Event Description | Logged By |\n")
+	buf.WriteString("|---|---|---|\n")
+	for _, ev := range incident.Timeline {
+		buf.WriteString(fmt.Sprintf("| %s | %s | `%s` |\n", ev.CreatedAt.UTC().Format("15:04:05"), ev.Description, ev.CreatedBy))
+	}
+	buf.WriteString("\n---\n*Report auto-generated by Google SRE Copilot Intelligence Engine*\n")
+
+	return buf.Bytes()
 }
 
 func (s *AICopilotService) callOpenAITriage(incident *models.Incident, runbooks []models.KnowledgeDocument) (*models.AICopilotTriageResult, error) {

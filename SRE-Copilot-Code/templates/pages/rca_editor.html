@@ -14,11 +14,16 @@
         </div>
 
         <div class="flex items-center space-x-3">
+            <a href="/incidents/{{ .Incident.ID }}/rca/download" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg border border-slate-700 transition-colors inline-flex items-center space-x-1.5">
+                <span>⬇</span>
+                <span>Download .md</span>
+            </a>
             <button onclick="window.print()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg border border-slate-700 transition-colors">
-                🖨 Export / Print
+                🖨 Print
             </button>
-            <button onclick="saveRCA()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white rounded-lg transition-colors">
-                Publish RCA
+            <button id="publishBtn" onclick="saveRCA()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white rounded-lg transition-colors flex items-center space-x-1.5">
+                <span>☁</span>
+                <span>Publish to Cloud Storage</span>
             </button>
         </div>
     </div>
@@ -95,9 +100,30 @@
 </div>
 
 <script>
-function saveRCA() {
-    alert("RCA published successfully! Archived in Knowledge Center.");
-    window.location.href = "/incidents/{{ .Incident.ID }}";
+async function saveRCA() {
+    const btn = document.getElementById('publishBtn');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> <span>Uploading to GCS...</span>';
+
+    try {
+        const resp = await fetch('/api/v1/incidents/{{ .Incident.ID }}/rca/publish', {
+            method: 'POST'
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            alert(`✓ Success!\n${data.message}\nArtifact: ${data.artifact}`);
+            window.location.href = "/incidents/{{ .Incident.ID }}";
+        } else {
+            alert(`Error publishing postmortem: ${data.error || 'Server error'}`);
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    } catch (e) {
+        alert(`Network error publishing to Cloud Storage: ${e}`);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
 }
 </script>
 {{ end }}
